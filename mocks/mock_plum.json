@@ -1,0 +1,62 @@
+{
+  "strong_motion_event": {
+    "id": "evt-plum-critical-001",
+    "source": "twin_iot_sensor",
+    "kind": "seismic_sensor",
+    "lat": 36.8021,
+    "lon": 10.1815,
+    "data": {
+      "rawWaveformTelemetry": {
+        "samplingRateHz": 100,
+        "components": {
+          "vertical_z": [0.05, 0.45, 1.25, 2.10, 1.50],
+          "east_west_e": [0.08, -0.35, 0.95, 1.80, 0.85],
+          "north_south_n": [-0.03, 0.25, 0.85, 1.95, 0.75]
+        },
+        "units": "m/s^2",
+        "clippingDetected": false,
+        "noiseFloorExceeded": false
+      }
+    }
+  },
+  "minor_motion_event": {
+    "id": "evt-plum-minor-002",
+    "source": "twin_iot_sensor",
+    "kind": "seismic_sensor",
+    "lat": 36.8025,
+    "lon": 10.1820,
+    "data": {
+      "rawWaveformTelemetry": {
+        "samplingRateHz": 100,
+        "components": {
+          "vertical_z": [0.005, 0.012, 0.025, 0.018, 0.008],
+          "east_west_e": [0.003, 0.015, 0.022, 0.014, 0.006],
+          "north_south_n": [0.004, 0.010, 0.020, 0.015, 0.005]
+        },
+        "units": "m/s^2",
+        "clippingDetected": false,
+        "noiseFloorExceeded": false
+      }
+    }
+  },
+  "clipping_anomaly_event": {
+    "id": "evt-plum-clip-003",
+    "source": "twin_iot_sensor",
+    "kind": "seismic_sensor",
+    "lat": 36.8010,
+    "lon": 10.1800,
+    "data": {
+      "rawWaveformTelemetry": {
+        "samplingRateHz": 100,
+        "components": {
+          "vertical_z": [2.50, 2.50, 2.50, 2.50, 2.50],
+          "east_west_e": [2.50, 2.50, 2.50, 2.50, 2.50],
+          "north_south_n": [2.50, 2.50, 2.50, 2.50, 2.50]
+        },
+        "units": "m/s^2",
+        "clippingDetected": true,
+        "noiseFloorExceeded": true
+      }
+    }
+  }
+}

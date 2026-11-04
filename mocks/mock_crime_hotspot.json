@@ -1,0 +1,59 @@
+{
+  "gunshot_high_risk_event": {
+    "id": "evt-crime-gunshot-001",
+    "source": "twin_urban_event_stream",
+    "kind": "acoustic_gunshot_triangulation",
+    "lat": 36.8050,
+    "lon": 10.1830,
+    "data": {
+      "decibelLevel": 118.2,
+      "severity": 5,
+      "associatedContext": {
+        "dist_to_police_station_m": 2500.0,
+        "dist_to_hospital_m": 1800.0,
+        "historical_crime_count": 28,
+        "is_weekend": true,
+        "is_night": true,
+        "street_lighting_status": "malfunctioning"
+      }
+    }
+  },
+  "elevated_risk_event": {
+    "id": "evt-crime-elevated-002",
+    "source": "twin_urban_event_stream",
+    "kind": "crime_hotspot",
+    "lat": 36.8080,
+    "lon": 10.1860,
+    "data": {
+      "decibelLevel": 95.0,
+      "severity": 3,
+      "associatedContext": {
+        "dist_to_police_station_m": 2200.0,
+        "dist_to_hospital_m": 1200.0,
+        "historical_crime_count": 25,
+        "is_weekend": false,
+        "is_night": true,
+        "street_lighting_status": "malfunctioning"
+      }
+    }
+  },
+  "low_risk_event": {
+    "id": "evt-crime-low-003",
+    "source": "twin_urban_event_stream",
+    "kind": "crime_hotspot",
+    "lat": 36.7990,
+    "lon": 10.1750,
+    "data": {
+      "decibelLevel": 68.0,
+      "severity": 1,
+      "associatedContext": {
+        "dist_to_police_station_m": 450.0,
+        "dist_to_hospital_m": 600.0,
+        "historical_crime_count": 5,
+        "is_weekend": false,
+        "is_night": false,
+        "street_lighting_status": "ok"
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>ALR-E1-0004</identifier>
+  <sender>citybrain@triplet-07.local</sender>
+  <sent>2026-11-05T10:09:00-00:00</sent>
+  <status>Exercise</status>
+  <msgType>Cancel</msgType>
+  <source>citybrain/detector/earthquake</source>
+  <scope>Public</scope>
+  <note>Exercise scenario E1 - run 20261105-100007 - verdict v-88213 revoked by Guardian</note>
+  <references>citybrain@triplet-07.local,ALR-E1-0001,2026-11-05T10:00:07-00:00</references>
+  <incidents>EV-E1-0001</incidents>
+</alert>

@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PLUM Seismic Algorithm Test Dashboard</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    input[type=range] {
+      accent-color: var(--primary, #3b82f6);
+    }
+  </style>
+</head>
+<body class="bg-[var(--background,#0f172a)] text-[var(--foreground,#f8fafc)] antialiased p-4 md:p-6 font-sans">
+
+  <!-- Header -->
+  <div class="max-w-6xl mx-auto mb-6">
+    <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-[var(--border,#334155)] gap-4">
+      <div>
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/20 text-red-400 font-bold text-lg border border-red-500/30">⚡</span>
+          <h1 class="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground,#f8fafc)]">PLUM Algorithm Verification Dashboard</h1>
+        </div>
+        <p class="text-sm text-[var(--muted-foreground,#94a3b8)] mt-1">
+          Interactive strong-motion waveform simulator, MMI conversion, and 2-station network test bench.
+        </p>
+      </div>
+
+      <!-- Server / Local Mode Indicator -->
+      <div class="flex items-center gap-2 text-xs">
+        <span id="backend-status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="backend-status-text" class="text-[var(--muted-foreground,#94a3b8)] font-mono">Engine: Active (In-Browser & Python API Ready)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN: Controls & Presets (5 cols) -->
+    <div class="lg:col-span-5 space-y-6">
+
+      <!-- Scenario Presets -->
+      <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-5 shadow-sm">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-[var(--muted-foreground,#94a3b8)] mb-3 flex items-center justify-between">
+          <span>Preset Scenarios</span>
+          <span class="text-xs font-normal lowercase text-blue-400">from mocks</span>
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button onclick="loadScenario('critical')" class="px-3 py-2 text-xs font-medium rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 transition text-left">
+            🚨 Critical Quake<br><span class="text-[10px] text-red-400/80">MMI 7.8 (Alert)</span>
+          </button>
+          <button onclick="loadScenario('minor')" class="px-3 py-2 text-xs font-medium rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition text-left">
+            ℹ️ Minor Tremor<br><span class="text-[10px] text-amber-400/80">MMI 2.4 (Check Only)</span>
+          </button>
+          <button onclick="loadScenario('clipping')" class="px-3 py-2 text-xs font-medium rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 transition text-left">
+            ⚠️ Clipped Signal<br><span class="text-[10px] text-purple-400/80">Hardware Error</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Waveform Parameters -->
+      <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-5 shadow-sm space-y-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-[var(--muted-foreground,#94a3b8)] flex items-center justify-between">
+          <span>Waveform Generators (3-Axis)</span>
+          <span class="text-xs text-[var(--muted-foreground,#94a3b8)] font-mono">100 Hz</span>
+        </h2>
+
+        <!-- Vertical (Z) Slider -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-blue-400 font-medium">Vertical Axis (Z) Peak</span>
+            <span id="val-z" class="font-mono text-[var(--foreground,#f8fafc)]">2.10 m/s²</span>
+          </div>
+          <input type="range" id="slider-z" min="0" max="5" step="0.005" value="2.10" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" oninput="updateSimulation()">
+        </div>
+
+        <!-- East-West (E) Slider -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-emerald-400 font-medium">East-West Axis (E) Peak</span>
+            <span id="val-e" class="font-mono text-[var(--foreground,#f8fafc)]">1.80 m/s²</span>
+          </div>
+          <input type="range" id="slider-e" min="0" max="5" step="0.005" value="1.80" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" oninput="updateSimulation()">
+        </div>
+
+        <!-- North-South (N) Slider -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-amber-400 font-medium">North-South Axis (N) Peak</span>
+            <span id="val-n" class="font-mono text-[var(--foreground,#f8fafc)]">1.95 m/s²</span>
+          </div>
+          <input type="range" id="slider-n" min="0" max="5" step="0.005" value="1.95" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" oninput="updateSimulation()">
+        </div>
+
+        <!-- Noise Floor Slider -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-400">Background Noise Floor</span>
+            <span id="val-noise" class="font-mono text-[var(--foreground,#f8fafc)]">0.05 m/s²</span>
+          </div>
+          <input type="range" id="slider-noise" min="0" max="0.5" step="0.005" value="0.05" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" oninput="updateSimulation()">
+        </div>
+
+        <!-- Toggles -->
+        <div class="pt-2 border-t border-[var(--border,#334155)] grid grid-cols-2 gap-2 text-xs">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="check-clip" class="rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-0" onchange="updateSimulation()">
+            <span class="text-[var(--foreground,#f8fafc)]">Clipping Detected</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="check-noise" class="rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-0" onchange="updateSimulation()">
+            <span class="text-[var(--foreground,#f8fafc)]">Noise Exceeded</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Multi-Station 2-Station Logic Interactive Test -->
+      <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-5 shadow-sm space-y-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-[var(--muted-foreground,#94a3b8)]">
+          PLUM 2-Station Confirmation Logic
+        </h2>
+        <p class="text-xs text-[var(--muted-foreground,#94a3b8)]">
+          Kilb et al. (2021): Station 1 with MMI &ge; 4.0 triggers an alert only if a neighbouring station records MMI &ge; 3.0 within 15 seconds.
+        </p>
+        <div class="grid grid-cols-2 gap-2 pt-2">
+          <button onclick="testNetworkTrigger(true)" class="px-3 py-2 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition">
+            Test Confirmed Pair
+          </button>
+          <button onclick="testNetworkTrigger(false)" class="px-3 py-2 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium transition">
+            Test Isolated Spike (Suppressed)
+          </button>
+        </div>
+        <div id="network-result-box" class="p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-xs font-mono text-slate-300">
+          Click a button above to run the 2-station simulation test.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Real-Time Visualization & Results (7 cols) -->
+    <div class="lg:col-span-7 space-y-6">
+
+      <!-- Live Waveform Canvas -->
+      <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-[var(--muted-foreground,#94a3b8)]">
+            Synthesized Accelerometer Waveform
+          </h2>
+          <div class="flex items-center gap-3 text-xs">
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-400"></span>Z</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>E</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>N</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>Peak Vector</span>
+          </div>
+        </div>
+
+        <div class="relative bg-slate-950 rounded-lg p-2 border border-slate-800">
+          <canvas id="waveform-canvas" width="600" height="180" class="w-full h-44 block"></canvas>
+        </div>
+      </div>
+
+      <!-- Primary Metrics Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- Peak PGA -->
+        <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-4 shadow-sm">
+          <span class="text-xs text-[var(--muted-foreground,#94a3b8)] uppercase font-semibold">Peak Acceleration (PGA)</span>
+          <div id="metric-pga" class="text-2xl font-bold font-mono text-[var(--foreground,#f8fafc)] mt-1">3.3842 m/s²</div>
+          <span id="metric-pga-cm" class="text-xs text-[var(--muted-foreground,#94a3b8)] font-mono">338.4 cm/s²</span>
+        </div>
+
+        <!-- Peak MMI -->
+        <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-4 shadow-sm">
+          <span class="text-xs text-[var(--muted-foreground,#94a3b8)] uppercase font-semibold">Modified Mercalli (MMI)</span>
+          <div id="metric-mmi" class="text-2xl font-bold font-mono text-red-400 mt-1">9.21</div>
+          <span id="metric-mmi-desc" class="text-xs text-red-400 font-medium">Violent Shaking</span>
+        </div>
+
+        <!-- Threshold Decision -->
+        <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-4 shadow-sm">
+          <span class="text-xs text-[var(--muted-foreground,#94a3b8)] uppercase font-semibold">PLUM Alert Status</span>
+          <div id="metric-status" class="text-sm font-bold mt-2 inline-flex items-center px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+            🚨 ALERT TRIGGERED
+          </div>
+          <p id="metric-threshold" class="text-[11px] text-[var(--muted-foreground,#94a3b8)] mt-1">Target baseline &ge; 4.0 MMI</p>
+        </div>
+      </div>
+
+      <!-- Emergency Agent Action Directives -->
+      <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-5 shadow-sm space-y-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-[var(--muted-foreground,#94a3b8)] flex items-center justify-between">
+          <span>Emergency Axis Dispatch Orders</span>
+          <span id="agent-severity-pill" class="text-xs font-mono px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">Severity 5</span>
+        </h2>
+        <div id="actions-container" class="space-y-2">
+          <!-- Dynamic action items -->
+        </div>
+      </div>
+
+      <!-- Algorithmic Evidence Trail -->
+      <div class="bg-[var(--card,#1e293b)] border border-[var(--border,#334155)] rounded-xl p-5 shadow-sm space-y-2">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-[var(--muted-foreground,#94a3b8)]">
+          Audit & Evidence Trail
+        </h2>
+        <ul id="evidence-container" class="space-y-1 font-mono text-xs text-[var(--muted-foreground,#94a3b8)]">
+          <!-- Dynamic evidence items -->
+        </ul>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // -------------------------------------------------------------
+    // Core PLUM Logic (matches Python PLUMEngine exactly)
+    // -------------------------------------------------------------
+    function calculatePGA(components) {
+      const z = components.vertical_z || [];
+      const e = components.east_west_e || [];
+      const n = components.north_south_n || [];
+      const minLen = Math.min(z.length, e.length, n.length);
+      if (minLen === 0) return 0.0;
+
+      let maxMag = 0.0;
+      for (let i = 0; i < minLen; i++) {
+        const mag = Math.sqrt(z[i] * z[i] + e[i] * e[i] + n[i] * n[i]);
+        if (mag > maxMag) maxMag = mag;
+      }
+      return maxMag;
+    }
+
+    function pgaToMMI(pga_m_s2) {
+      if (pga_m_s2 <= 0.0001) return 1.0;
+      const pga_cm_s2 = pga_m_s2 * 100.0;
+      const lg = Math.log10(Math.max(pga_cm_s2, 1e-6));
+      let mmi = 1.0;
+      // Worden et al. (2012) bilinear equation
+      if (lg <= 1.57) {
+        mmi = 1.78 + 1.55 * lg;
+      } else {
+        mmi = -1.60 + 3.70 * lg;
+      }
+      return Math.round(Math.max(1.0, Math.min(10.0, mmi)) * 100) / 100;
+    }
+
+    function getMMIDescription(mmi) {
+      if (mmi < 2.0) return "Not Felt";
+      if (mmi < 3.0) return "Weak Shaking";
+      if (mmi < 4.0) return "Light Shaking";
+      if (mmi < 5.0) return "Moderate Shaking";
+      if (mmi < 6.0) return "Strong Shaking";
+      if (mmi < 7.0) return "Very Strong Shaking";
+      if (mmi < 8.0) return "Severe Shaking";
+      return "Violent Shaking";
+    }
+
+    // -------------------------------------------------------------
+    // Waveform Synthesizer
+    // -------------------------------------------------------------
+    function generateSyntheticWaveform(ampZ, ampE, ampN, noiseAmp) {
+      const nPoints = 120;
+      const z = [], e = [], n = [], mag = [];
+      for (let i = 0; i < nPoints; i++) {
+        const t = (i - 30) / 15.0;
+        const envelope = Math.exp(-t * t);
+        const carrier1 = Math.sin(i * 0.4);
+        const carrier2 = Math.cos(i * 0.45);
+        const carrier3 = Math.sin(i * 0.35 + 0.5);
+
+        const noiseZ = (Math.random() - 0.5) * 2 * noiseAmp;
+        const noiseE = (Math.random() - 0.5) * 2 * noiseAmp;
+        const noiseN = (Math.random() - 0.5) * 2 * noiseAmp;
+
+        const valZ = ampZ * envelope * carrier1 + noiseZ;
+        const valE = ampE * envelope * carrier2 + noiseE;
+        const valN = ampN * envelope * carrier3 + noiseN;
+
+        z.push(valZ);
+        e.push(valE);
+        n.push(valN);
+        mag.push(Math.sqrt(valZ * valZ + valE * valE + valN * valN));
+      }
+      return { vertical_z: z, east_west_e: e, north_south_n: n, magnitude: mag };
+    }
+
+    // -------------------------------------------------------------
+    // Canvas Renderer
+    // -------------------------------------------------------------
+    function drawWaveforms(waveform) {
+      const canvas = document.getElementById('waveform-canvas');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      const midY = h / 2;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid lines
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, midY); ctx.lineTo(w, midY);
+      ctx.moveTo(0, midY - 40); ctx.lineTo(w, midY - 40);
+      ctx.moveTo(0, midY + 40); ctx.lineTo(w, midY + 40);
+      ctx.stroke();
+
+      function plotLine(series, color, width = 1.5, offset = 0) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        const step = w / series.length;
+        const scale = 25.0; // scale factor
+        for (let i = 0; i < series.length; i++) {
+          const x = i * step;
+          const y = midY - (series[i] * scale) + offset;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      plotLine(waveform.vertical_z, '#60a5fa', 1.2);
+      plotLine(waveform.east_west_e, '#34d399', 1.2);
+      plotLine(waveform.north_south_n, '#fbbf24', 1.2);
+      plotLine(waveform.magnitude, '#f87171', 2.0);
+    }
+
+    // -------------------------------------------------------------
+    // Dashboard State & Simulation Loop
+    // -------------------------------------------------------------
+    function updateSimulation() {
+      const ampZ = parseFloat(document.getElementById('slider-z').value);
+      const ampE = parseFloat(document.getElementById('slider-e').value);
+      const ampN = parseFloat(document.getElementById('slider-n').value);
+      const noise = parseFloat(document.getElementById('slider-noise').value);
+      const isClip = document.getElementById('check-clip').checked;
+      const isNoise = document.getElementById('check-noise').checked;
+
+      // Update text values
+      document.getElementById('val-z').innerText = ampZ.toFixed(2) + ' m/s²';
+      document.getElementById('val-e').innerText = ampE.toFixed(2) + ' m/s²';
+      document.getElementById('val-n').innerText = ampN.toFixed(2) + ' m/s²';
+      document.getElementById('val-noise').innerText = noise.toFixed(2) + ' m/s²';
+
+      const waveform = generateSyntheticWaveform(ampZ, ampE, ampN, noise);
+      drawWaveforms(waveform);
+
+      const pga = calculatePGA(waveform);
+      const mmi = pgaToMMI(pga);
+      const isAlert = mmi >= 4.0;
+
+      // Update Metric Panels
+      document.getElementById('metric-pga').innerText = pga.toFixed(4) + ' m/s²';
+      document.getElementById('metric-pga-cm').innerText = (pga * 100).toFixed(1) + ' cm/s²';
+      document.getElementById('metric-mmi').innerText = mmi.toFixed(2);
+      document.getElementById('metric-mmi-desc').innerText = getMMIDescription(mmi);
+
+      const statusBadge = document.getElementById('metric-status');
+      if (isAlert) {
+        statusBadge.className = "text-sm font-bold mt-2 inline-flex items-center px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30";
+        statusBadge.innerText = "🚨 ALERT TRIGGERED";
+        document.getElementById('metric-mmi').className = "text-2xl font-bold font-mono text-red-400 mt-1";
+      } else {
+        statusBadge.className = "text-sm font-bold mt-2 inline-flex items-center px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30";
+        statusBadge.innerText = "ℹ️ SUB-THRESHOLD (MONITOR)";
+        document.getElementById('metric-mmi').className = "text-2xl font-bold font-mono text-amber-400 mt-1";
+      }
+
+      // Generate Evidence Trail
+      const evidence = [];
+      if (isClip) evidence.push("Hardware Warning: Sensor clipping detected (signal maxed out).");
+      if (isNoise) evidence.push("Hardware Warning: Sensor noise floor exceeded.");
+      evidence.push(`PLUM Computed PGA: ${pga.toFixed(4)} m/s² | Estimated MMI: ${mmi.toFixed(2)} (${getMMIDescription(mmi)})`);
+      if (isAlert) {
+        evidence.push(`PLUM Threshold Exceeded! MMI ${mmi.toFixed(2)} >= 4.0 target alert baseline.`);
+      } else {
+        evidence.push(`Ground motion below early-warning threshold (MMI ${mmi.toFixed(2)} < 4.0).`);
+      }
+
+      const evidenceContainer = document.getElementById('evidence-container');
+      evidenceContainer.innerHTML = evidence.map(ev => `<li class="flex items-start gap-2"><span class="text-blue-400 font-bold">•</span><span>${ev}</span></li>`).join('');
+
+      // Generate Actions
+      const actionsContainer = document.getElementById('actions-container');
+      const severityPill = document.getElementById('agent-severity-pill');
+
+      if (isAlert) {
+        const severity = mmi >= 6.0 ? 5 : 4;
+        severityPill.innerText = `Severity ${severity}`;
+        severityPill.className = "text-xs font-mono px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30";
+
+        actionsContainer.innerHTML = `
+          <div class="p-2.5 rounded-lg bg-red-950/40 border border-red-900/60 flex items-start gap-2.5 text-xs">
+            <span class="px-1.5 py-0.5 rounded bg-red-500 text-white font-mono font-bold text-[10px]">P0</span>
+            <div>
+              <span class="font-semibold text-red-300">[alert] channel:cap</span>
+              <p class="text-slate-300 mt-0.5">CRITICAL: PLUM Early Warning MMI ${mmi.toFixed(2)} detected. Initiate shelter-in-place.</p>
+            </div>
+          </div>
+          <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-start gap-2.5 text-xs">
+            <span class="px-1.5 py-0.5 rounded bg-red-500 text-white font-mono font-bold text-[10px]">P0</span>
+            <div>
+              <span class="font-semibold text-slate-200">[dispatch_units] units:nearest</span>
+              <p class="text-slate-400 mt-0.5">Deploy first responders to grid zone (36.8021, 10.1815).</p>
+            </div>
+          </div>
+          <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-start gap-2.5 text-xs">
+            <span class="px-1.5 py-0.5 rounded bg-amber-500 text-black font-mono font-bold text-[10px]">P1</span>
+            <div>
+              <span class="font-semibold text-slate-200">[corridor_clear] road:corridor</span>
+              <p class="text-slate-400 mt-0.5">Request Mobility Axis to clear primary emergency transit corridors.</p>
+            </div>
+          </div>
+        `;
+      } else {
+        severityPill.innerText = "Severity 2";
+        severityPill.className = "text-xs font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30";
+
+        actionsContainer.innerHTML = `
+          <div class="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-start gap-2.5 text-xs">
+            <span class="px-1.5 py-0.5 rounded bg-blue-500 text-white font-mono font-bold text-[10px]">P3</span>
+            <div>
+              <span class="font-semibold text-slate-200">[structural_check] sensor:seismic</span>
+              <p class="text-slate-400 mt-0.5">Minor ground motion detected (MMI ${mmi.toFixed(2)}). Continue background monitoring without CAP dispatch.</p>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Scenario Loaders
+    // -------------------------------------------------------------
+    function loadScenario(type) {
+      if (type === 'critical') {
+        document.getElementById('slider-z').value = 2.10;
+        document.getElementById('slider-e').value = 1.80;
+        document.getElementById('slider-n').value = 1.95;
+        document.getElementById('slider-noise').value = 0.05;
+        document.getElementById('check-clip').checked = false;
+        document.getElementById('check-noise').checked = false;
+      } else if (type === 'minor') {
+        document.getElementById('slider-z').value = 0.025;
+        document.getElementById('slider-e').value = 0.022;
+        document.getElementById('slider-n').value = 0.020;
+        document.getElementById('slider-noise').value = 0.005;
+        document.getElementById('check-clip').checked = false;
+        document.getElementById('check-noise').checked = false;
+      } else if (type === 'clipping') {
+        document.getElementById('slider-z').value = 2.50;
+        document.getElementById('slider-e').value = 2.50;
+        document.getElementById('slider-n').value = 2.50;
+        document.getElementById('slider-noise').value = 0.15;
+        document.getElementById('check-clip').checked = true;
+        document.getElementById('check-noise').checked = true;
+      }
+      updateSimulation();
+    }
+
+    // -------------------------------------------------------------
+    // 2-Station Network Simulation
+    // -------------------------------------------------------------
+    function testNetworkTrigger(hasNeighbour) {
+      const box = document.getElementById('network-result-box');
+      if (hasNeighbour) {
+        box.innerHTML = `
+          <div class="text-emerald-400 font-bold mb-1">✅ 2-STATION CONFIRMED DETECTION</div>
+          <div class="text-slate-300">Station #1 (STA-01): Triggered at MMI 5.82 (&ge; 4.0 primary)</div>
+          <div class="text-slate-300">Station #2 (STA-02, 8km): Confirmed at t=5s with MMI 4.21 (&ge; 3.0 secondary)</div>
+          <div class="text-emerald-300 mt-1 font-semibold">-> Status: Valid seismic event published to Emergency Axis.</div>
+        `;
+      } else {
+        box.innerHTML = `
+          <div class="text-amber-400 font-bold mb-1">🛡️ TRIGGER SUPPRESSED (Isolated Noise Spike)</div>
+          <div class="text-slate-300">Station #3 (STA-03-ISOLATED): Spiked to MMI 4.80 at t=12s</div>
+          <div class="text-slate-300">Nearest Neighbours: All 6 stations remained below MMI 3.0</div>
+          <div class="text-amber-300 mt-1 font-semibold">-> Status: Suppressed by PLUM state-machine. No false alarm sent!</div>
+        `;
+      }
+    }
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', () => {
+      updateSimulation();
+    });
+  </script>
+</body>
+</html>

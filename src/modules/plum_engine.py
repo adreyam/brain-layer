@@ -322,15 +322,15 @@ class PLUMEngine:
 
     @classmethod
     def pga_to_mmi_scalar(cls, pga_m_s2: float) -> float:
-        if pga_m_s2 <= 0.001:
+        """Worden et al. (2012) bilinear conversion PGA (m/s^2) -> MMI."""
+        if pga_m_s2 <= 0.0001:
             return 1.0
         pga_cm_s2 = pga_m_s2 * 100.0
-        if pga_cm_s2 < 1.7:
-            mmi = 1.0 + 1.5 * math.log10(pga_cm_s2)
-        elif pga_cm_s2 < 120.0:
-            mmi = 3.66 + 1.83 * math.log10(pga_cm_s2)
+        lg = math.log10(max(pga_cm_s2, 1e-6))
+        if lg <= 1.57:
+            mmi = 1.78 + 1.55 * lg
         else:
-            mmi = 4.66 + 1.80 * math.log10(pga_cm_s2)
+            mmi = -1.60 + 3.70 * lg
         return round(max(1.0, min(10.0, mmi)), 2)
 
     @classmethod

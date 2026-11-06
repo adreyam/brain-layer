@@ -1,0 +1,13 @@
+langgraph
+pydantic>=2.0
+google-genai
+numpy
+scipy
+pandas
+scikit-learn
+pyyaml
+pytest
+requests
+joblib
+matplotlib
+

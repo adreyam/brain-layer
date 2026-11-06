@@ -1,0 +1,46 @@
+{
+  "tsunami_offshore_quake_event": {
+    "id": "evt-tsunami-quake-01",
+    "source": "emsc_feed",
+    "kind": "seismic_catalog",
+    "lat": 37.50,
+    "lon": 10.40,
+    "data": {
+      "magnitude": 7.2,
+      "depth_km": 14.0,
+      "epicenter_lat": 37.50,
+      "epicenter_lon": 10.40,
+      "offshore": true,
+      "catalog_source": "emsc"
+    }
+  },
+  "sea_level_anomaly_event": {
+    "id": "evt-tide-anomaly-01",
+    "source": "la_goulette_tide_station",
+    "kind": "sea_level_observation",
+    "lat": 36.81,
+    "lon": 10.31,
+    "data": {
+      "station_id": "TUN-TG-01",
+      "sea_level_m": 1.65,
+      "baseline_m": 0.85,
+      "change_m_per_min": 0.45
+    }
+  },
+  "onshore_quake_event": {
+    "id": "evt-onshore-quake-02",
+    "source": "usgs_feed",
+    "kind": "seismic_catalog",
+    "lat": 36.50,
+    "lon": 9.80,
+    "data": {
+      "magnitude": 6.8,
+      "depth_km": 10.0,
+      "epicenter_lat": 36.50,
+      "epicenter_lon": 9.80,
+      "offshore": false,
+      "catalog_source": "usgs"
+    }
+  }
+}
+

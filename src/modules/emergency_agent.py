@@ -2,30 +2,41 @@
 Emergency Axis Agent.
 
 Serves as the operational dispatch layer for the Emergency axis. It integrates
-standalone physics/analytic modules (PLUM Engine & Crime Hotspot Engine) to construct
-standardized dispatch orders and CAP alerts.
+standalone physics/analytic modules (PLUM Engine & Crime Hotspot Engine, Flood Engine,
+Catalog Quake Engine, Tsunami Engine, and Storm Engine) to construct standardized dispatch
+orders and CAP alerts.
 """
 from __future__ import annotations
 
 import time
-from dataclasses import asdict
 from typing import Any, Dict, List, Optional
-
-import numpy as np
 from pydantic import BaseModel, Field
 
-from .plum_engine import PLUMEngine, SensorReading, Station, StationData, WaveformTelemetry, station_intensity
-from .crime_hotspot import CrimeHotspotEngine, RiskTerrainContext, RawCrimeEvent, IncidentContext
+from .plum_engine import PLUMEngine, WaveformTelemetry
+from .crime_hotspot import CrimeHotspotEngine, RawCrimeEvent, IncidentContext
+from .hazard_common import (
+    HazardAssessment,
+    load_hazard_config,
+    map_risk_level_to_severity,
+)
+from .flood_engine import FloodEngine
+from .catalog_quake_engine import CatalogQuakeEngine
+from .tsunami_engine import TsunamiEngine
+from .storm_engine import StormEngine
+from .hazard_playbooks import (
+    PlaybookAction,
+    generate_cap_alert,
+    get_playbook_actions,
+    run_llm_planner_if_enabled,
+)
 
 
 class ActionItem(BaseModel):
-    type: str          # "dispatch_units", "alert", "corridor_clear", "structural_check"
+    type: str          # "dispatch_units", "alert", "corridor_clear", "structural_check", "evacuate", "monitor"
     resource: str      # "units:nearest", "channel:cap", "road:corridor"
     detail: str
-    priority: int = 1  # 0 = Critical / Immediate
-    # Units requested by a dispatch_units order, e.g. ["fire_engine", "fire_engine", "ambulance"].
-    # Known types: fire_engine, ambulance, police, rescue. The dashboard simulation reads this list.
-    units: List[str] = Field(default_factory=list)
+    priority: int = 1  # 0 = Critical / Immediate, 1 = High, 2 = Medium, 3 = Low
+    requires_human_approval: bool = False
 
 
 class EmergencyAgentResponse(BaseModel):
@@ -35,10 +46,11 @@ class EmergencyAgentResponse(BaseModel):
     status: str = "ok"
     plumAlertTriggered: bool = False
     peakMMI: float = 0.0
-    plumMode: Optional[str] = None                 # "network" (full PLUM) or "single_station"
-    plumDetections: List[Dict[str, Any]] = Field(default_factory=list)
-    plumSuppressed: List[Dict[str, Any]] = Field(default_factory=list)
-    stationPeakMMI: Dict[str, float] = Field(default_factory=dict)
+    hazard: Optional[str] = None
+    risk_level: Optional[str] = None
+    risk_score: Optional[float] = None
+    requires_human_approval: bool = False
+    hazard_assessment: Optional[HazardAssessment] = None
     actions: List[ActionItem]
     evidence: List[str]
 
@@ -46,81 +58,131 @@ class EmergencyAgentResponse(BaseModel):
 class EmergencyAgent:
     """Operational agent coordinating response logic and underlying domain engines."""
 
-    def __init__(self, plum_engine: Optional[PLUMEngine] = None, crime_engine: Optional[CrimeHotspotEngine] = None):
+    def __init__(
+        self,
+        plum_engine: Optional[PLUMEngine] = None,
+        crime_engine: Optional[CrimeHotspotEngine] = None,
+        flood_engine: Optional[FloodEngine] = None,
+        catalog_quake_engine: Optional[CatalogQuakeEngine] = None,
+        tsunami_engine: Optional[TsunamiEngine] = None,
+        storm_engine: Optional[StormEngine] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ):
+        self.config = config or load_hazard_config()
         self.plum = plum_engine or PLUMEngine()
         self.crime = crime_engine or CrimeHotspotEngine()
+        self.flood = flood_engine or FloodEngine(self.config)
+        self.catalog_quake = catalog_quake_engine or CatalogQuakeEngine(self.config)
+        self.tsunami = tsunami_engine or TsunamiEngine(self.config)
+        self.storm = storm_engine or StormEngine(self.config)
 
-    def run_plum_network(self, network: dict) -> dict:
-        """Run the full PLUM engine on a station network.
+        # In-memory short-term buffer for multi-event correlation
+        self._event_buffer: List[Dict[str, Any]] = []
+        self._last_plum_active_ts: float = 0.0
+        self._last_catalog_assessment: Optional[HazardAssessment] = None
 
-        network = {"samplingRateHz": 40, "stations": [{"sensor_id", "lat", "lon",
-                   "accel": {"vertical_z": [...], "east_west_e": [...], "north_south_n": [...]}}]}
-        Accelerations in m/s^2, all stations aligned on the same start time.
-        """
-        fs = float(network.get("samplingRateHz", 100))
-        data = [
-            StationData(
-                station=Station(s["sensor_id"], float(s["lat"]), float(s["lon"])),
-                sample_rate_hz=fs,
-                accel={k: np.asarray(v, dtype=float) for k, v in s["accel"].items()},
-            )
-            for s in network["stations"]
+    def _buffer_event(self, event_dict: Dict[str, Any]) -> None:
+        """Stores event in memory and purges records older than 6 hours."""
+        now = time.time()
+        self._event_buffer.append(dict(event_dict))
+        # Keep only events within last 6 hours (21600 seconds)
+        cutoff = now - 21600
+        self._event_buffer = [
+            e for e in self._event_buffer if float(e.get("ts", now)) >= cutoff
         ]
-        result = self.plum.run(data)
-        peaks = {d.station.sensor_id: round(float(np.nanmax(station_intensity(d))), 2) for d in data}
-        peak_sid = max(peaks, key=peaks.get)
-        evidence = [f"PLUM network: {len(data)} stations, {fs:.0f} Hz, peak MMI {peaks[peak_sid]} at {peak_sid}"]
-        for det in result.detections:
-            evidence.extend(det.evidence)
-            evidence.append(f"Event declared at t={det.detection_time_s:.0f} s")
-        for sup in result.suppressed:
-            evidence.append(f"Suppressed trigger at {sup.station} (MMI {sup.trigger_mmi:.2f}, t={sup.trigger_second} s): {sup.reason}")
-        if not result.detections and not result.suppressed:
-            evidence.append("No station reached the primary threshold (MMI 4.0)")
-        return {
-            "alert": bool(result.detections),
-            "peak_mmi": peaks[peak_sid],
-            "evidence": evidence,
-            "report": {
-                "plumMode": "network",
-                "plumDetections": [asdict(d) for d in result.detections],
-                "plumSuppressed": [asdict(s) for s in result.suppressed],
-                "stationPeakMMI": peaks,
-            },
-        }
+
+    def _get_buffered_by_kinds(self, kinds: set[str]) -> List[Dict[str, Any]]:
+        return [e for e in self._event_buffer if e.get("kind") in kinds]
+
+    def _hazard_assessment_to_response(
+        self,
+        assessment: HazardAssessment,
+        raw_event: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Converts a HazardAssessment into a standardized EmergencyAgentResponse dictionary."""
+        playbook_actions = get_playbook_actions(assessment)
+        refined_actions = run_llm_planner_if_enabled(assessment, playbook_actions)
+
+        action_items: List[ActionItem] = []
+        for act in refined_actions:
+            action_items.append(
+                ActionItem(
+                    type=act.type,
+                    resource=act.resource,
+                    detail=act.detail,
+                    priority=act.priority,
+                    requires_human_approval=act.requires_human_approval,
+                )
+            )
+
+        # If warning or critical, attach CAP alert action
+        if assessment.risk_level in {"warning", "critical"}:
+            trust_id = raw_event.get("data", {}).get("trust_verdict_id") or raw_event.get("trust_verdict_id")
+            cap_xml = generate_cap_alert(
+                assessment,
+                msg_type="Alert",
+                trust_verdict_id=trust_id,
+            )
+            action_items.append(
+                ActionItem(
+                    type="alert_cap",
+                    resource="channel:cap",
+                    detail=f"CAP 1.2 payload generated ({assessment.hazard.upper()} {assessment.risk_level.upper()}).",
+                    priority=0 if assessment.risk_level == "critical" else 1,
+                    requires_human_approval=assessment.needs_human_confirmation,
+                )
+            )
+
+        severity = map_risk_level_to_severity(assessment.risk_level, self.config)
+        requires_approval = (
+            assessment.needs_human_confirmation
+            or any(a.requires_human_approval for a in action_items)
+            or assessment.risk_level == "critical"
+        )
+
+        return EmergencyAgentResponse(
+            axis="emergency",
+            severity=severity,
+            confidence=assessment.confidence,
+            status="ok",
+            plumAlertTriggered=False,
+            peakMMI=0.0,
+            hazard=assessment.hazard,
+            risk_level=assessment.risk_level,
+            risk_score=assessment.risk_score,
+            requires_human_approval=requires_approval,
+            hazard_assessment=assessment,
+            actions=action_items,
+            evidence=assessment.evidence,
+        ).model_dump()
 
     def process_event(self, event_dict: dict) -> dict:
         """Main entry point compatible with LangGraph Orchestrator payload schema."""
+        self._buffer_event(event_dict)
+
         actions: List[ActionItem] = []
         evidence: List[str] = []
         severity = 1
         confidence = 0.8
         plum_alert = False
         peak_mmi = 0.0
-        plum_extra: Dict[str, Any] = {}
 
         kind = event_dict.get("kind", "")
         data = event_dict.get("data", {})
         source = event_dict.get("source", "unknown")
 
-        # 1. Seismic Telemetry Path (PLUM Engine)
-        if "stationNetwork" in data or "rawWaveformTelemetry" in data or kind == "seismic_sensor":
+        # ------------------------------------------------------------------- #
+        # 1. Seismic Telemetry Path (PLUM Engine) - Existing Path
+        # ------------------------------------------------------------------- #
+        if "rawWaveformTelemetry" in data or kind == "seismic_sensor":
             try:
-                if "stationNetwork" in data:
-                    # Full PLUM (Kilb et al. 2021): per-station 1-s MMI + two-station confirmation
-                    net = self.run_plum_network(data["stationNetwork"])
-                    peak_mmi, plum_alert = net["peak_mmi"], net["alert"]
-                    evidence.extend(net["evidence"])
-                    plum_extra = net["report"]
-                else:
-                    # Simplified single-sensor path (no neighbour confirmation)
-                    telemetry_data = data.get("rawWaveformTelemetry", data)
-                    raw_telemetry = WaveformTelemetry(**telemetry_data)
-                    pga, peak_mmi, plum_alert, plum_evidence = self.plum.process_telemetry(raw_telemetry)
-                    evidence.extend(plum_evidence)
-                    plum_extra = {"plumMode": "single_station"}
+                telemetry_data = data.get("rawWaveformTelemetry", data)
+                raw_telemetry = WaveformTelemetry(**telemetry_data)
+                pga, peak_mmi, plum_alert, plum_evidence = self.plum.process_telemetry(raw_telemetry)
+                evidence.extend(plum_evidence)
 
                 if plum_alert:
+                    self._last_plum_active_ts = time.time()
                     severity = 5 if peak_mmi >= 6.0 else 4
                     confidence = 0.95
                     actions.extend([
@@ -128,45 +190,50 @@ class EmergencyAgent:
                             type="alert",
                             resource="channel:cap",
                             detail=f"CRITICAL: PLUM Early Warning MMI {peak_mmi} detected. Initiate shelter-in-place.",
-                            priority=0
+                            priority=0,
+                            requires_human_approval=True,
                         ),
                         ActionItem(
                             type="dispatch_units",
                             resource="units:nearest",
                             detail=f"Deploy first responders to grid zone ({event_dict.get('lat')}, {event_dict.get('lon')}).",
                             priority=0,
-                            units=["rescue", "fire_engine", "ambulance", "police"] if peak_mmi >= 6.0 else ["rescue", "ambulance"]
+                            requires_human_approval=True,
                         ),
                         ActionItem(
                             type="corridor_clear",
                             resource="road:corridor",
                             detail="Request Mobility Axis to clear primary emergency transit corridors.",
-                            priority=1
-                        )
+                            priority=1,
+                            requires_human_approval=False,
+                        ),
                     ])
-                elif plum_extra.get("plumSuppressed"):
-                    severity = 1
-                    sup = plum_extra["plumSuppressed"][0]
-                    actions.append(ActionItem(
-                        type="sensor_check",
-                        resource=f"sensor:{sup['station']}",
-                        detail=(f"PLUM suppressed an isolated trigger at {sup['station']} (MMI {sup['trigger_mmi']}): "
-                                f"no neighbour confirmation. No public alert; schedule a sensor inspection."),
-                        priority=3
-                    ))
                 else:
                     severity = 2
                     actions.append(ActionItem(
                         type="structural_check",
                         resource="sensor:seismic",
                         detail=f"Minor ground motion detected (MMI {peak_mmi}). Continue background monitoring.",
-                        priority=3
+                        priority=3,
+                        requires_human_approval=False,
                     ))
             except Exception as e:
                 evidence.append(f"PLUM processing error: {str(e)}")
                 severity = 3
 
-        # 2. Acoustic / Crime Incident Path (Crime Hotspot Engine)
+            return EmergencyAgentResponse(
+                severity=severity,
+                confidence=confidence,
+                plumAlertTriggered=plum_alert,
+                peakMMI=peak_mmi,
+                requires_human_approval=(severity >= 5),
+                actions=actions,
+                evidence=evidence,
+            ).model_dump()
+
+        # ------------------------------------------------------------------- #
+        # 2. Acoustic / Crime Incident Path (Crime Hotspot Engine) - Existing
+        # ------------------------------------------------------------------- #
         elif kind in {"acoustic_gunshot_triangulation", "crime_hotspot"}:
             try:
                 crime_event = RawCrimeEvent(
@@ -188,110 +255,109 @@ class EmergencyAgent:
                         resource="units:nearest",
                         detail=f"Dispatch Tactical/Police units for {classification} (Score: {risk_score}).",
                         priority=0 if severity >= 4 else 2,
-                        units=(["police", "police", "ambulance"] if severity >= 5 else ["police"])
+                        requires_human_approval=(severity >= 5),
                     ),
                     ActionItem(
                         type="alert",
                         resource="channel:cap",
                         detail=f"Broadcast active incident notification for {kind}.",
-                        priority=1
-                    )
+                        priority=1,
+                        requires_human_approval=False,
+                    ),
                 ])
             except Exception as e:
                 evidence.append(f"Crime hotspot processing error: {str(e)}")
                 severity = 3
 
-        # 3. Vision Smoke & Fire Detection (Edge CV Camera)
-        elif kind in {"vision_fire_smoke", "cv_fire"}:
-            conf = data.get("confidence", 0.8)
-            fire_detected = data.get("fire_detected", False)
-            smoke_detected = data.get("smoke_detected", False)
-            flame_pct = data.get("flame_area_pct", 0.0)
+            return EmergencyAgentResponse(
+                severity=severity,
+                confidence=confidence,
+                plumAlertTriggered=plum_alert,
+                peakMMI=peak_mmi,
+                requires_human_approval=(severity >= 5),
+                actions=actions,
+                evidence=evidence,
+            ).model_dump()
 
-            if fire_detected:
-                severity = 5 if conf >= 0.85 else 4
-                evidence.append(f"CV camera confirmed active fire (confidence={conf:.2f}, flame_area={flame_pct}%).")
-                actions.extend([
-                    ActionItem(
-                        type="dispatch_units",
-                        resource="units:nearest",
-                        detail=f"Dispatch Fire Brigade & EMS to fire zone ({event_dict.get('lat')}, {event_dict.get('lon')}).",
-                        priority=0,
-                        units=["fire_engine", "fire_engine", "ambulance"] if severity >= 5 else ["fire_engine", "ambulance"]
-                    ),
-                    ActionItem(
-                        type="alert",
-                        resource="channel:cap",
-                        detail="CRITICAL: Structural/Active fire detected via computer vision. Evacuate immediate sector.",
-                        priority=0
-                    ),
-                    ActionItem(
-                        type="corridor_clear",
-                        resource="road:corridor",
-                        detail="Request Mobility Axis to clear emergency fire transit corridor.",
-                        priority=1
-                    )
-                ])
-            elif smoke_detected:
-                severity = 3
-                evidence.append(f"CV camera detected dense smoke plume (confidence={conf:.2f}).")
-                actions.extend([
-                    ActionItem(
-                        type="dispatch_units",
-                        resource="units:nearest",
-                        detail="Dispatch reconnaissance fire unit for smoke inspection.",
-                        priority=2,
-                        units=["fire_engine"]
-                    ),
-                    ActionItem(
-                        type="alert",
-                        resource="channel:cap",
-                        detail="Advisory: Smoke plume detected in district.",
-                        priority=2
-                    )
-                ])
+        # ------------------------------------------------------------------- #
+        # 3. Hydrological & Flood Hazard Path (NEW)
+        # ------------------------------------------------------------------- #
+        elif kind in {"hydro_observation", "weather_forecast"}:
+            recent_events = self._get_buffered_by_kinds({
+                "hydro_observation", "weather_forecast", "weather_observation"
+            })
+            assessment = self.flood.evaluate(recent_events)
+            return self._hazard_assessment_to_response(assessment, event_dict)
 
-        # 4. Hydrology & Flood Telemetry
-        elif kind in {"flood_sensor", "flood"}:
-            water_lvl = data.get("water_level_cm", 0.0)
-            critical_thresh = data.get("critical_threshold_cm", 50.0)
-            submerged_lanes = data.get("submerged_lane_count", 0)
+        # ------------------------------------------------------------------- #
+        # 4. Seismic Catalog & Tsunami Path (NEW)
+        # ------------------------------------------------------------------- #
+        elif kind == "seismic_catalog":
+            plum_active = (time.time() - self._last_plum_active_ts) < 120.0
+            quake_assessment = self.catalog_quake.evaluate(
+                event_dict,
+                plum_active=plum_active,
+                plum_evidence=["Recent local PLUM ground motion recorded."] if plum_active else None,
+            )
+            self._last_catalog_assessment = quake_assessment
 
-            if water_lvl >= critical_thresh:
-                severity = 5
-                evidence.append(f"Critical flood stage breached: water level {water_lvl}cm >= threshold {critical_thresh}cm.")
-                actions.extend([
-                    ActionItem(
-                        type="dispatch_units",
-                        resource="units:nearest",
-                        detail="Deploy Civil Protection & Water Rescue teams to flooded zone.",
-                        priority=0,
-                        units=["rescue", "rescue"]
-                    ),
-                    ActionItem(
-                        type="alert",
-                        resource="channel:cap",
-                        detail=f"URGENT: Flash flood warning. Water depth at {water_lvl}cm. Avoid underpasses.",
-                        priority=0
-                    ),
-                    ActionItem(
-                        type="corridor_clear",
-                        resource="road:corridor",
-                        detail=f"Block flooded roadway ({submerged_lanes} lanes submerged) and divert all traffic.",
-                        priority=0
-                    )
-                ])
-            else:
-                severity = 2
-                evidence.append(f"Water level elevated ({water_lvl}cm) but below critical threshold ({critical_thresh}cm).")
-                actions.append(ActionItem(
-                    type="monitor",
-                    resource="sensor:hydrology",
-                    detail="Continue automated hydrological monitoring of water drainage rate.",
-                    priority=3
-                ))
+            # If offshore candidate, evaluate tsunami potential
+            if quake_assessment.metadata.get("offshore") and quake_assessment.metadata.get("magnitude", 0) >= 6.5:
+                recent_sea_level = self._get_buffered_by_kinds({"sea_level_observation"})
+                tsunami_assessment = self.tsunami.evaluate(quake_assessment, recent_sea_level)
+                if tsunami_assessment.risk_level in {"warning", "critical"}:
+                    return self._hazard_assessment_to_response(tsunami_assessment, event_dict)
 
-        # 5. Direct Incident Triggers (Accident, Fire Alarm, Collapse, Gas Leak)
+            return self._hazard_assessment_to_response(quake_assessment, event_dict)
+
+        # ------------------------------------------------------------------- #
+        # 5. Sea Level Gauge Observation Path (NEW)
+        # ------------------------------------------------------------------- #
+        elif kind == "sea_level_observation":
+            if self._last_catalog_assessment is not None:
+                # Correlate with recent catalog earthquake
+                recent_sea_level = self._get_buffered_by_kinds({"sea_level_observation"})
+                tsunami_assessment = self.tsunami.evaluate(self._last_catalog_assessment, recent_sea_level)
+                if tsunami_assessment.metadata.get("candidate"):
+                    return self._hazard_assessment_to_response(tsunami_assessment, event_dict)
+
+            # Normal baseline sea-level telemetry
+            evidence.append(f"Recorded sea-level telemetry from station {data.get('station_id', 'unknown')}.")
+            return EmergencyAgentResponse(
+                severity=1,
+                confidence=0.8,
+                status="ok",
+                hazard="tsunami",
+                risk_level="low",
+                risk_score=0.05,
+                actions=[ActionItem(type="monitor", resource="sensor:tide_gauge", detail="Sea-level within baseline limits.", priority=3)],
+                evidence=evidence,
+            ).model_dump()
+
+        # ------------------------------------------------------------------- #
+        # 6. Meteorological & Storm Hazard Path (NEW)
+        # ------------------------------------------------------------------- #
+        elif kind in {"weather_observation", "official_weather_alert"}:
+            recent_weather = self._get_buffered_by_kinds({
+                "weather_observation", "weather_forecast", "official_weather_alert"
+            })
+            storm_assessment = self.storm.evaluate(recent_weather)
+
+            # Also check if heavy rain triggers flood assessment
+            recent_hydro = self._get_buffered_by_kinds({
+                "hydro_observation", "weather_forecast", "weather_observation"
+            })
+            flood_assessment = self.flood.evaluate(recent_hydro)
+
+            # Select dominant hazard
+            if flood_assessment.risk_score > storm_assessment.risk_score and flood_assessment.risk_level in {"warning", "critical"}:
+                return self._hazard_assessment_to_response(flood_assessment, event_dict)
+
+            return self._hazard_assessment_to_response(storm_assessment, event_dict)
+
+        # ------------------------------------------------------------------- #
+        # 7. Direct Incident Triggers (Accident, Fire, Gas Leak, Collapse) - Existing
+        # ------------------------------------------------------------------- #
         elif kind in {"accident", "fire_alarm", "collapse", "gas_leak"}:
             severity = data.get("severity", 4)
             evidence.append(f"Received direct emergency trigger: kind={kind} from source={source}.")
@@ -302,22 +368,20 @@ class EmergencyAgent:
                     resource="units:nearest",
                     detail=f"Dispatch Police & EMS to reported {kind} event.",
                     priority=0,
-                    units={
-                        "accident": ["police", "ambulance"],
-                        "fire_alarm": ["fire_engine", "ambulance"],
-                        "collapse": ["rescue", "fire_engine", "ambulance"],
-                        "gas_leak": ["fire_engine", "police"],
-                    }[kind] + (["ambulance"] if kind == "accident" and data.get("injuries_reported", 0) >= 3 else [])
+                    requires_human_approval=(severity >= 5),
                 ),
                 ActionItem(
                     type="alert",
                     resource="channel:cap",
                     detail=f"Broadcast active incident notification for {kind}.",
-                    priority=1
-                )
+                    priority=1,
+                    requires_human_approval=False,
+                ),
             ])
 
-        # 4. Fallback Path
+        # ------------------------------------------------------------------- #
+        # 8. Fallback Path - Existing
+        # ------------------------------------------------------------------- #
         else:
             evidence.append(f"Received generic telemetry event ({kind}).")
             severity = 1
@@ -325,7 +389,8 @@ class EmergencyAgent:
                 type="monitor",
                 resource="channel:internal",
                 detail="Logging raw metric; no emergency dispatch required.",
-                priority=4
+                priority=4,
+                requires_human_approval=False,
             ))
 
         return EmergencyAgentResponse(
@@ -333,7 +398,7 @@ class EmergencyAgent:
             confidence=confidence,
             plumAlertTriggered=plum_alert,
             peakMMI=peak_mmi,
-            **plum_extra,
+            requires_human_approval=(severity >= 5),
             actions=actions,
-            evidence=evidence
+            evidence=evidence,
         ).model_dump()

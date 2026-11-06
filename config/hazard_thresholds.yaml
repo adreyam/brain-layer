@@ -1,0 +1,86 @@
+# Values are expert-estimated starting points and must be reviewed by a domain expert (civil protection, hydrologist, seismologist) before any real deployment.
+
+# City reference location (default: Tunis / Mediterranean metropolitan area)
+city_center:
+  lat: 36.8065
+  lon: 10.1815
+
+# Source agreement & safety cap (Section 7.6)
+source_agreement:
+  min_sources_for_critical: 2 # Minimum independent sources required to reach 'critical'
+
+# Severity scale mapping (Section 7.1)
+severity_mapping:
+  low: 1
+  watch: 2
+  warning: 4
+  critical: 5
+
+# Stale data window: maximum age of input telemetry before it is discarded (minutes)
+max_age_minutes:
+  weather_forecast: 360 # 6 hours
+  weather_observation: 60 # 1 hour
+  hydro_observation: 60 # 1 hour
+  seismic_catalog: 120 # 2 hours
+  sea_level_observation: 60 # 1 hour
+  official_weather_alert: 180 # 3 hours
+
+# Flood Engine configuration (Section 7.2)
+flood:
+  rain_24h_norm_mm: 100.0 # mm normalization ceiling
+  rain_now_norm_mm_h: 30.0 # mm/h normalization ceiling
+  weights:
+    rain_24h_forecast: 0.35
+    rain_now: 0.20
+    soil_saturation: 0.20
+    river_level: 0.15
+    drainage_load: 0.10
+  cutoffs:
+    low: 0.30
+    watch: 0.50
+    warning: 0.70
+
+# Catalog Earthquake Engine configuration (Section 7.3)
+earthquake:
+  min_magnitude: 4.5
+  radius_km: 350.0
+  shallow_depth_km: 30.0
+  magnitude_thresholds:
+    watch: 4.5
+    warning: 5.5
+    critical: 6.5
+
+# Tsunami Engine configuration (Section 7.4)
+tsunami:
+  min_magnitude: 6.5
+  max_depth_km: 70.0
+  wave_speed_kmh: 700.0 # deep-water tsunami wave speed km/h
+  sea_level_change_threshold_m: 0.30 # sea level anomaly in meters
+  sea_level_window_min: 30 # confirmation window in minutes
+  region_bbox:
+    lat_min: 30.0
+    lat_max: 46.0
+    lon_min: -6.0
+    lon_max: 37.0
+
+# Storm Engine configuration (Section 7.5)
+storm:
+  gust_warning_kmh: 75.0
+  gust_critical_kmh: 105.0
+  pressure_drop_hpa_3h: 5.0
+  rain_rate_warning_mm_h: 25.0
+  rain_rate_critical_mm_h: 50.0
+  lightning_rate_critical: 30.0 # strikes per min in area
+
+# Feeds configuration (Section 10)
+feeds:
+  open_meteo:
+    forecast_url: "https://api.open-meteo.com/v1/forecast"
+    polling_interval_s: 900
+  usgs:
+    url: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson"
+    polling_interval_s: 300
+  emsc:
+    url: "https://www.seismicportal.eu/fdsnws/event/1/query?format=json"
+    polling_interval_s: 300
+

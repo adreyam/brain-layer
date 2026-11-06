@@ -1,0 +1,54 @@
+{
+  "storm_gust_warning_event": {
+    "id": "evt-storm-gust-01",
+    "source": "meteo_station_airport",
+    "kind": "weather_observation",
+    "lat": 36.85,
+    "lon": 10.22,
+    "data": {
+      "wind_speed_kmh": 65.0,
+      "gust_kmh": 82.0,
+      "pressure_drop_hpa_3h": 4.5,
+      "rain_rate_mm_h": 18.0
+    }
+  },
+  "storm_radar_rotation_event": {
+    "id": "evt-storm-radar-02",
+    "source": "doppler_radar_network",
+    "kind": "weather_observation",
+    "lat": 36.80,
+    "lon": 10.18,
+    "data": {
+      "radar_rotation": true,
+      "gust_kmh": 115.0,
+      "hail": true,
+      "lightning_rate": 42.0
+    }
+  },
+  "storm_official_alert_event": {
+    "id": "evt-storm-official-03",
+    "source": "national_met_institute",
+    "kind": "official_weather_alert",
+    "lat": 36.80,
+    "lon": 10.18,
+    "data": {
+      "alert_type": "severe_storm",
+      "alert_level": "red",
+      "issuer": "INM Civil Protection"
+    }
+  },
+  "storm_calm_event": {
+    "id": "evt-storm-calm-04",
+    "source": "meteo_station_airport",
+    "kind": "weather_observation",
+    "lat": 36.85,
+    "lon": 10.22,
+    "data": {
+      "wind_speed_kmh": 12.0,
+      "gust_kmh": 18.0,
+      "pressure_drop_hpa_3h": 0.2,
+      "rain_rate_mm_h": 0.0
+    }
+  }
+}
+

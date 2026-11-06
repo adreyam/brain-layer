@@ -1,0 +1,74 @@
+{
+  "flood_critical_scenario": [
+    {
+      "id": "evt-fl-fc-01",
+      "source": "open_meteo_forecast",
+      "kind": "weather_forecast",
+      "lat": 36.80,
+      "lon": 10.18,
+      "data": {
+        "rain_24h_forecast_mm": 95.0,
+        "horizon_h": 24
+      }
+    },
+    {
+      "id": "evt-fl-obs-01",
+      "source": "iot_weather_station",
+      "kind": "weather_observation",
+      "lat": 36.80,
+      "lon": 10.18,
+      "data": {
+        "rain_rate_mm_h": 28.5,
+        "soil_saturation": 0.92
+      }
+    },
+    {
+      "id": "evt-fl-hydro-01",
+      "source": "river_gauge_net",
+      "kind": "hydro_observation",
+      "lat": 36.80,
+      "lon": 10.18,
+      "data": {
+        "river_level_m": 4.8,
+        "flood_stage_m": 4.5,
+        "drainage_load": 0.88
+      }
+    }
+  ],
+  "flood_watch_scenario": [
+    {
+      "id": "evt-fl-fc-02",
+      "source": "open_meteo_forecast",
+      "kind": "weather_forecast",
+      "lat": 36.80,
+      "lon": 10.18,
+      "data": {
+        "rain_24h_forecast_mm": 45.0
+      }
+    },
+    {
+      "id": "evt-fl-obs-02",
+      "source": "iot_weather_station",
+      "kind": "weather_observation",
+      "lat": 36.80,
+      "lon": 10.18,
+      "data": {
+        "rain_rate_mm_h": 8.0,
+        "soil_saturation": 0.40
+      }
+    }
+  ],
+  "flood_dry_scenario": [
+    {
+      "id": "evt-fl-fc-03",
+      "source": "open_meteo_forecast",
+      "kind": "weather_forecast",
+      "lat": 36.80,
+      "lon": 10.18,
+      "data": {
+        "rain_24h_forecast_mm": 2.0
+      }
+    }
+  ]
+}
+

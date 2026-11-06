@@ -1,0 +1,48 @@
+<?xml version='1.0' encoding='utf-8'?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>ALR-TSU-0005</identifier>
+  <sender>citybrain@triplet-07.local</sender>
+  <sent>2026-11-05T18:00:00-00:00</sent>
+  <status>Exercise</status>
+  <msgType>Alert</msgType>
+  <source>citybrain/detector/tsunami</source>
+  <scope>Public</scope>
+  <note>Exercise scenario T1 - Offshore M7.2 Tsunami Alert</note>
+  <incidents>EV-TSU-0001</incidents>
+  <info>
+    <category>Geo</category>
+    <event>Tsunami Warning - Wave Inundation Threat</event>
+    <responseType>Evacuate</responseType>
+    <urgency>Immediate</urgency>
+    <severity>Extreme</severity>
+    <certainty>Observed</certainty>
+    <eventCode>
+      <valueName>CITYBRAIN</valueName>
+      <value>TSUNAMI-CANDIDATE</value>
+    </eventCode>
+    <expires>2026-11-05T19:00:00-00:00</expires>
+    <senderName>City Brain - Emergency Response</senderName>
+    <headline>TSUNAMI EVACUATION: Destructive wave incoming for coastal port zones</headline>
+    <instruction>Evacuate coastal shores, marinas, and low-lying beachfront sectors immediately. Move inland to high ground.</instruction>
+    <parameter>
+      <valueName>trust_verdict_id</valueName>
+      <value>v-99104</value>
+    </parameter>
+    <parameter>
+      <valueName>triggered_by</valueName>
+      <value>emsc-quake-7.2 tide-gauge-TG01</value>
+    </parameter>
+    <parameter>
+      <valueName>lead_time_s</valueName>
+      <value>1800</value>
+    </parameter>
+    <area>
+      <areaDesc>Coastal Port Sector; La Goulette Waterfront</areaDesc>
+      <geocode>
+        <valueName>ZONE</valueName>
+        <value>COASTAL-A</value>
+      </geocode>
+    </area>
+  </info>
+</alert>
+
